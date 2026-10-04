@@ -4,3 +4,9 @@ spring:
 
 server:
   port: 5000
+
+similar-products:
+  downstream:
+    base-url: http://localhost:3001
+    connect-timeout: 500ms
+    read-timeout: 500ms

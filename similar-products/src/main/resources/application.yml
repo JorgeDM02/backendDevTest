@@ -10,3 +10,5 @@ similar-products:
     base-url: http://localhost:3001
     connect-timeout: 500ms
     read-timeout: 500ms
+  fan-out:
+    max-concurrent-calls: 64

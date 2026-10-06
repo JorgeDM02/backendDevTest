@@ -13,15 +13,17 @@ public class ControllableProductDetailClient implements ProductDetailClient {
     private final Map<String, Long> delayMillisById;
     private final AtomicInteger inFlight = new AtomicInteger();
     private final AtomicInteger peakInFlight = new AtomicInteger();
+    private final AtomicInteger invocationCount = new AtomicInteger();
 
     public ControllableProductDetailClient(Map<String, ProductDetail> detailsById,
-                                           Map<String, Long> delayMillisById) {
+            Map<String, Long> delayMillisById) {
         this.detailsById = Map.copyOf(detailsById);
         this.delayMillisById = Map.copyOf(delayMillisById);
     }
 
     @Override
     public Optional<ProductDetail> findById(String productId) {
+        invocationCount.incrementAndGet();
         peakInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
         try {
             sleep(delayMillisById.getOrDefault(productId, 0L));
@@ -33,6 +35,10 @@ public class ControllableProductDetailClient implements ProductDetailClient {
 
     public int peakInFlight() {
         return peakInFlight.get();
+    }
+
+    public int invocationCount() {
+        return invocationCount.get();
     }
 
     private static void sleep(long millis) {

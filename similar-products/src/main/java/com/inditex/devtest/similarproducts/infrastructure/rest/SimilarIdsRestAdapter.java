@@ -10,15 +10,14 @@ import org.springframework.web.client.RestClient;
 import com.inditex.devtest.similarproducts.application.port.out.SimilarIdsClient;
 import com.inditex.devtest.similarproducts.domain.ProductNotFoundException;
 
-@Component
-class SimilarIdsRestAdapter implements SimilarIdsClient {
+public class SimilarIdsRestAdapter implements SimilarIdsClient {
 
     private static final ParameterizedTypeReference<List<String>> SIMILAR_IDS_TYPE = new ParameterizedTypeReference<>() {
     };
 
     private final RestClient restClient;
 
-    SimilarIdsRestAdapter(RestClient downstreamRestClient) {
+    public SimilarIdsRestAdapter(RestClient downstreamRestClient) {
         this.restClient = downstreamRestClient;
     }
 

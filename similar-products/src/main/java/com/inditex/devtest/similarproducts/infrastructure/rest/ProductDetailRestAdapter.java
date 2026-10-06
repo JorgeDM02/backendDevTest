@@ -9,12 +9,11 @@ import org.springframework.web.client.RestClient;
 import com.inditex.devtest.similarproducts.application.port.out.ProductDetailClient;
 import com.inditex.devtest.similarproducts.domain.ProductDetail;
 
-@Component
-class ProductDetailRestAdapter implements ProductDetailClient {
+public class ProductDetailRestAdapter implements ProductDetailClient {
 
     private final RestClient restClient;
 
-    ProductDetailRestAdapter(RestClient downstreamRestClient) {
+    public ProductDetailRestAdapter(RestClient downstreamRestClient) {
         this.restClient = downstreamRestClient;
     }
 

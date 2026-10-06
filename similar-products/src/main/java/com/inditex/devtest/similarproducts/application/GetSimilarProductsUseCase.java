@@ -33,7 +33,7 @@ public class GetSimilarProductsUseCase {
         return fetchDetailsConcurrently(similarIdsClient.findSimilarIds(productId));
     }
 
-        private List<ProductDetail> fetchDetailsConcurrently(List<String> similarIds) {
+    private List<ProductDetail> fetchDetailsConcurrently(List<String> similarIds) {
         List<CompletableFuture<Optional<ProductDetail>>> pendingLookups = new ArrayList<>(similarIds.size());
         for (String similarId : similarIds) {
             pendingLookups.add(fetchDetailAsync(similarId));

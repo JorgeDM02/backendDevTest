@@ -16,3 +16,17 @@ similar-products:
     similar-ids-ttl: 5m
     product-detail-ttl: 30s
     maximum-size: 10000
+  resilience:
+    similar-ids:
+      failure-rate-threshold: 50
+      minimum-number-of-calls: 20
+      sliding-window-size: 100
+      wait-duration-in-open-state: 10s
+    product-detail:
+      failure-rate-threshold: 50
+      minimum-number-of-calls: 20
+      sliding-window-size: 100
+      wait-duration-in-open-state: 10s
+    retry:
+      max-attempts: 2
+      wait-duration: 50ms

@@ -22,6 +22,8 @@ import com.inditex.devtest.similarproducts.infrastructure.rest.SimilarIdsRestAda
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Configuration
 public class DownstreamClientConfig {
@@ -30,9 +32,14 @@ public class DownstreamClientConfig {
     SimilarIdsClient similarIdsClient(RestClient downstreamRestClient,
             @Qualifier("similarIdsCircuitBreaker") CircuitBreaker similarIdsCircuitBreaker,
             @Qualifier("similarIdsRetry") Retry similarIdsRetry,
-            Cache<String, List<String>> similarIdsCache) {
+            Cache<String, List<String>> similarIdsCache,
+            MeterRegistry meterRegistry) {
+        Counter degradations = Counter.builder(ObservabilityConfig.DEGRADATIONS)
+                .tag("client", "similar-ids")
+                .register(meterRegistry);
         SimilarIdsClient resilient = new ResilientSimilarIdsClient(
-                new SimilarIdsRestAdapter(downstreamRestClient), similarIdsCircuitBreaker, similarIdsRetry);
+                new SimilarIdsRestAdapter(downstreamRestClient), similarIdsCircuitBreaker, similarIdsRetry,
+                degradations);
         return new CachingSimilarIdsClient(resilient, similarIdsCache);
     }
 
@@ -40,10 +47,14 @@ public class DownstreamClientConfig {
     ProductDetailClient productDetailClient(RestClient downstreamRestClient,
             @Qualifier("productDetailCircuitBreaker") CircuitBreaker productDetailCircuitBreaker,
             @Qualifier("productDetailRetry") Retry productDetailRetry,
-            Cache<String, Optional<ProductDetail>> productDetailCache) {
+            Cache<String, Optional<ProductDetail>> productDetailCache,
+            MeterRegistry meterRegistry) {
+        Counter degradations = Counter.builder(ObservabilityConfig.DEGRADATIONS)
+                .tag("client", "product-detail")
+                .register(meterRegistry);
         ProductDetailClient resilient = new ResilientProductDetailClient(
                 new ProductDetailRestAdapter(downstreamRestClient), productDetailCircuitBreaker,
-                productDetailRetry);
+                productDetailRetry, degradations);
         return new CachingProductDetailClient(resilient, productDetailCache);
     }
 

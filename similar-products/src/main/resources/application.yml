@@ -30,3 +30,13 @@ similar-products:
     retry:
       max-attempts: 2
       wait-duration: 50ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -19,11 +19,16 @@ import com.inditex.devtest.similarproducts.domain.ProductNotFoundException;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class ResilientSimilarIdsClientTest {
 
+    private static final String DEGRADATIONS = "similar.products.downstream.degradations";
+
     private CircuitBreaker circuitBreaker;
     private Retry retry;
+    private Counter degradations;
 
     @BeforeEach
     void setUp() {
@@ -31,11 +36,13 @@ class ResilientSimilarIdsClientTest {
                 new ResilienceProperties.CircuitBreakerSettings(50f, 4, 4, Duration.ofSeconds(10))));
         retry = Retry.of("test-similar-ids", ResiliencePolicy.retryConfig(
                 new ResilienceProperties.RetrySettings(2, Duration.ZERO)));
+        degradations = Counter.builder(DEGRADATIONS).register(new SimpleMeterRegistry());
     }
 
     @Test
     void returnsSimilarIdsWhenDownstreamSucceeds() {
-        var client = new ResilientSimilarIdsClient(productId -> List.of("2", "3"), circuitBreaker, retry);
+        var client = new ResilientSimilarIdsClient(productId -> List.of("2", "3"), circuitBreaker, retry,
+                degradations);
 
         assertThat(client.findSimilarIds("1")).containsExactly("2", "3");
     }
@@ -45,7 +52,7 @@ class ResilientSimilarIdsClientTest {
         SimilarIdsClient missing = productId -> {
             throw new ProductNotFoundException(productId);
         };
-        var client = new ResilientSimilarIdsClient(missing, circuitBreaker, retry);
+        var client = new ResilientSimilarIdsClient(missing, circuitBreaker, retry, degradations);
 
         assertThatThrownBy(() -> client.findSimilarIds("999"))
                 .isInstanceOf(ProductNotFoundException.class);
@@ -56,7 +63,7 @@ class ResilientSimilarIdsClientTest {
         SimilarIdsClient failing = productId -> {
             throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR);
         };
-        var client = new ResilientSimilarIdsClient(failing, circuitBreaker, retry);
+        var client = new ResilientSimilarIdsClient(failing, circuitBreaker, retry, degradations);
 
         assertThat(client.findSimilarIds("1")).isEmpty();
     }
@@ -68,7 +75,7 @@ class ResilientSimilarIdsClientTest {
             attempts.incrementAndGet();
             throw new ProductNotFoundException(productId);
         };
-        var client = new ResilientSimilarIdsClient(missing, circuitBreaker, retry);
+        var client = new ResilientSimilarIdsClient(missing, circuitBreaker, retry, degradations);
 
         for (int i = 0; i < 10; i++) {
             assertThatThrownBy(() -> client.findSimilarIds("999"))
@@ -86,7 +93,7 @@ class ResilientSimilarIdsClientTest {
             attempts.incrementAndGet();
             throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR);
         };
-        var client = new ResilientSimilarIdsClient(failing, circuitBreaker, retry);
+        var client = new ResilientSimilarIdsClient(failing, circuitBreaker, retry, degradations);
 
         for (int i = 0; i < 4; i++) {
             assertThat(client.findSimilarIds("1")).isEmpty();
@@ -97,5 +104,30 @@ class ResilientSimilarIdsClientTest {
         assertThat(client.findSimilarIds("1")).isEmpty();
 
         assertThat(attempts.get()).isEqualTo(attemptsWhenOpen);
+    }
+
+    @Test
+    void countsOneDegradationWhenDownstreamIsUnavailable() {
+        SimilarIdsClient failing = productId -> {
+            throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR);
+        };
+        var client = new ResilientSimilarIdsClient(failing, circuitBreaker, retry, degradations);
+
+        client.findSimilarIds("1");
+
+        assertThat(degradations.count()).isEqualTo(1.0d);
+    }
+
+    @Test
+    void countsNoDegradationForAProductThatSimplyDoesNotExist() {
+        SimilarIdsClient missing = productId -> {
+            throw new ProductNotFoundException(productId);
+        };
+        var client = new ResilientSimilarIdsClient(missing, circuitBreaker, retry, degradations);
+
+        assertThatThrownBy(() -> client.findSimilarIds("999"))
+                .isInstanceOf(ProductNotFoundException.class);
+
+        assertThat(degradations.count()).isZero();
     }
 }

@@ -20,11 +20,16 @@ import com.inditex.devtest.similarproducts.support.TestFixtures;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class ResilientProductDetailClientTest {
 
+    private static final String DEGRADATIONS = "similar.products.downstream.degradations";
+
     private CircuitBreaker circuitBreaker;
     private Retry retry;
+    private Counter degradations;
 
     @BeforeEach
     void setUp() {
@@ -32,12 +37,13 @@ class ResilientProductDetailClientTest {
                 new ResilienceProperties.CircuitBreakerSettings(50f, 4, 4, Duration.ofSeconds(10))));
         retry = Retry.of("test-product-detail", ResiliencePolicy.retryConfig(
                 new ResilienceProperties.RetrySettings(2, Duration.ZERO)));
+        degradations = Counter.builder(DEGRADATIONS).register(new SimpleMeterRegistry());
     }
 
     @Test
     void returnsDetailWhenDownstreamSucceeds() {
         var client = new ResilientProductDetailClient(
-                productId -> Optional.of(TestFixtures.product(productId)), circuitBreaker, retry);
+                productId -> Optional.of(TestFixtures.product(productId)), circuitBreaker, retry, degradations);
 
         Optional<ProductDetail> detail = client.findById("1");
 
@@ -49,7 +55,7 @@ class ResilientProductDetailClientTest {
         ProductDetailClient failing = productId -> {
             throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR);
         };
-        var client = new ResilientProductDetailClient(failing, circuitBreaker, retry);
+        var client = new ResilientProductDetailClient(failing, circuitBreaker, retry, degradations);
 
         assertThat(client.findById("1")).isEmpty();
     }
@@ -63,7 +69,7 @@ class ResilientProductDetailClientTest {
             }
             return Optional.of(TestFixtures.product(productId));
         };
-        var client = new ResilientProductDetailClient(flaky, circuitBreaker, retry);
+        var client = new ResilientProductDetailClient(flaky, circuitBreaker, retry, degradations);
 
         assertThat(client.findById("1")).contains(TestFixtures.product("1"));
         assertThat(attempts.get()).isEqualTo(2);
@@ -76,7 +82,7 @@ class ResilientProductDetailClientTest {
             attempts.incrementAndGet();
             throw new ResourceAccessException("read timed out");
         };
-        var client = new ResilientProductDetailClient(timingOut, circuitBreaker, retry);
+        var client = new ResilientProductDetailClient(timingOut, circuitBreaker, retry, degradations);
 
         assertThat(client.findById("1")).isEmpty();
         assertThat(attempts.get()).isEqualTo(1);
@@ -89,7 +95,7 @@ class ResilientProductDetailClientTest {
             attempts.incrementAndGet();
             throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR);
         };
-        var client = new ResilientProductDetailClient(failing, circuitBreaker, retry);
+        var client = new ResilientProductDetailClient(failing, circuitBreaker, retry, degradations);
 
         for (int i = 0; i < 4; i++) {
             assertThat(client.findById("1")).isEmpty();
@@ -100,5 +106,27 @@ class ResilientProductDetailClientTest {
         assertThat(client.findById("1")).isEmpty();
 
         assertThat(attempts.get()).isEqualTo(attemptsWhenOpen);
+    }
+
+    @Test
+    void countsOneDegradationWhenDownstreamIsUnavailable() {
+        ProductDetailClient failing = productId -> {
+            throw new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR);
+        };
+        var client = new ResilientProductDetailClient(failing, circuitBreaker, retry, degradations);
+
+        client.findById("1");
+
+        assertThat(degradations.count()).isEqualTo(1.0d);
+    }
+
+    @Test
+    void countsNoDegradationWhenDownstreamSucceeds() {
+        var client = new ResilientProductDetailClient(
+                productId -> Optional.of(TestFixtures.product(productId)), circuitBreaker, retry, degradations);
+
+        client.findById("1");
+
+        assertThat(degradations.count()).isZero();
     }
 }
